@@ -79,10 +79,45 @@ async def async_setup_entry(
     sensors = []
     if config_entry.data.get(SETUP_TICMODE) == TICMODE_STANDARD:
         # standard mode
-        _LOGGER.error(
-            "%s: standard mode is not supported (yet ?): no entities will be spawned",
-            config_entry.title,
-        )
+        sensors = [
+            ADCOSensor(
+                config_entry.title, config_entry.entry_id, serial_reader
+            ),  # needs to be the first for ADS parsing
+            RegularStrSensor(
+                tag="NGTF",
+                name="Option tarifaire choisie",
+                config_title=config_entry.title,
+                config_uniq_id=config_entry.entry_id,
+                serial_reader=serial_reader,
+                icon="mdi:cash-check",
+                category=EntityCategory.CONFIG,
+            ),
+            RegularIntSensor(
+                tag="PREF",
+                name="Puissance souscrite",
+                config_title=config_entry.title,
+                config_uniq_id=config_entry.entry_id,
+                serial_reader=serial_reader,
+                category=EntityCategory.CONFIG,
+                device_class=SensorDeviceClass.APPARENT_POWER,
+                native_unit_of_measurement=POWER_WATT,
+            ),
+
+            # EAST : conso globale
+            (offer, timestamp) = serial_reader.values("EGTF")
+            index_names = []
+            if offre == "BASE":
+                index_names[0] = "Index consommation"
+            if offre == "EJP":
+                index_names[0] = "Index jour"
+                index_names[1] = "Index nuit"
+
+            # for each index_name, create sensor EASFXX
+
+
+            # couleur tempo J - registre d'etat
+            # couleur tempo J+1 - registre d'etat
+        ]
     else:
         # historic mode
         sensors = [
