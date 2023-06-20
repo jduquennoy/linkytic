@@ -13,7 +13,7 @@ TICMODE_STANDARD = "std"
 TICMODE_STANDARD_LABEL = "Standard"
 
 SETUP_SERIAL = "serial_device"
-SETUP_SERIAL_DEFAULT = "/dev/ttyUSB0"
+SETUP_SERIAL_DEFAULT = "Auto"
 SETUP_TICMODE = "tic_mode"
 SETUP_THREEPHASE = "three_phase"
 SETUP_THREEPHASE_DEFAULT = False
@@ -33,6 +33,7 @@ MODE_STANDARD_FIELD_SEPARATOR = b"\x09"
 
 MODE_HISTORIC_BAUD_RATE = 1200
 MODE_HISTORIC_FIELD_SEPARATOR = b"\x20"
+
 
 LINE_END = b"\r\n"
 FRAME_END = b"\r\x03\x02\n"
@@ -123,6 +124,35 @@ DEVICE_TYPES = {
     "64": "Compteur monophasé 60 A généralisation Linky G3 - arrivée puissance basse",
     "70": "Compteur monophasé Linky 60 A mise au point G3",
     "71": "Compteur triphasé Linky 60 A mise au point G3",
-    "72": "Compteur monophasé 90 A généralisation Linky G3 - arrivée puissance basse",
+    "75": "Compteur monophasé 90 A généralisation Linky G3 - arrivée puissance basse",
     "76": "Compteur triphasé 60 A généralisation Linky G3 - arrivée puissance basse",
+}
+
+PROVIDER_INDEX_DEFAULT_NAMES = [
+    "Index 1",
+    "Index 2",
+    "Index 3",
+    "Index 4",
+    "Index 5",
+    "Index 6",
+    "Index 7",
+    "Index 8",
+    "Index 9",
+    "Index 10",
+]
+
+PROVIDER_INDEX_NAMES_FOR_OFFER = {
+    # For the Base offer, the only used index is index 1,
+    # but its value is the same as the global consumption,
+    # so we ignore it to avoid data duplication
+    "BASE": [None, None, None, None, None, None, None, None, None, None, ],
+    "HCHP": ["Heure creuses", "Heures pleines", None, None, None, None, None, None, None, None],
+    "EJP": ["Heures normales", "Heures de pointe", None, None, None, None, None, None, None, None],
+    "TEMPO": ["Heures creuses bleues",
+              "Heures pleines bleues",
+              "Heures creuses blanches",
+              "Heures pleines blanches",
+              "Heures creuses rouges",
+              "Heures pleines rouges",
+              None, None, None, None],
 }

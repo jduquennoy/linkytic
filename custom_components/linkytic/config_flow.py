@@ -70,6 +70,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
         errors = {}
         title = user_input[SETUP_SERIAL]
+
+        # Validate the serial port
         try:
             linky_tic_tester(
                 device=user_input[SETUP_SERIAL],

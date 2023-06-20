@@ -24,24 +24,19 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up linkytic from a config entry."""
     # Create the serial reader thread and start it
-    serial_reader = LinkyTICReader(
-        title=entry.title,
-        port=entry.data.get(SETUP_SERIAL),
-        std_mode=entry.data.get(TICMODE_HISTORIC),
-        three_phase=entry.data.get(SETUP_THREEPHASE),
-        real_time=entry.options.get(OPTIONS_REALTIME),
-    )
-    serial_reader.start()
-    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, serial_reader.signalstop)
+    reader = await LinkyTICReader.create_with_config_entry(entry)
+    reader.start()
+
+    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, reader.signalstop)
     # Add options callback
     entry.async_on_unload(entry.add_update_listener(update_listener))
-    entry.async_on_unload(lambda: serial_reader.signalstop("config_entry_unload"))
+    entry.async_on_unload(lambda: reader.signalstop("config_entry_unload"))
     # Add the serial reader to HA and initialize sensors
     try:
-        hass.data[DOMAIN][entry.entry_id] = serial_reader
+        hass.data[DOMAIN][entry.entry_id] = reader
     except KeyError:
         hass.data[DOMAIN] = {}
-        hass.data[DOMAIN][entry.entry_id] = serial_reader
+        hass.data[DOMAIN][entry.entry_id] = reader
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True

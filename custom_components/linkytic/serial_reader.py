@@ -1,6 +1,8 @@
 """The linkytic integration serial reader."""
 from __future__ import annotations
 
+import asyncio
+import glob
 from collections.abc import Callable
 import logging
 import threading
@@ -10,6 +12,8 @@ import serial
 import serial.serialutil
 
 from homeassistant.core import callback
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import (
     BYTESIZE,
@@ -23,10 +27,11 @@ from .const import (
     MODE_HISTORIC_FIELD_SEPARATOR,
     MODE_STANDARD_BAUD_RATE,
     MODE_STANDARD_FIELD_SEPARATOR,
-    PARITY,
+    OPTIONS_REALTIME, PARITY,
+    SETUP_SERIAL, SETUP_THREEPHASE, SETUP_TICMODE,
     SHORT_FRAME_DETECTION_TAGS,
     SHORT_FRAME_FORCED_UPDATE_TAGS,
-    STOPBITS,
+    STOPBITS, TICMODE_STANDARD,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,6 +39,24 @@ _LOGGER = logging.getLogger(__name__)
 
 class LinkyTICReader(threading.Thread):
     """Implements the reading of a serial Linky TIC."""
+
+    @staticmethod
+    async def create_with_config_entry(config: ConfigEntry) -> LinkyTICReader:
+        port = config.data.get(SETUP_SERIAL)
+        std_mode = config.data.get(SETUP_TICMODE) == TICMODE_STANDARD
+        three_phase = config.data.get(SETUP_THREEPHASE)
+        real_time = config.options.get(OPTIONS_REALTIME)
+
+        _LOGGER.info(f"Trying to create a serial reader for {port}")
+        linky_tic_tester(port, std_mode=std_mode)
+
+        return LinkyTICReader(
+            title=config.title,
+            port=port,
+            std_mode=std_mode,
+            three_phase=three_phase,
+            real_time=real_time
+        )
 
     def __init__(
         self, title: str, port, std_mode, three_phase, real_time: bool | None = False
@@ -302,8 +325,8 @@ class LinkyTICReader(threading.Thread):
             return None
         _LOGGER.debug("line checksum is valid")
         # transform and store the values
-        payload: dict[str, str | None] = {"value": field_value.decode("ascii")}
-        payload["timestamp"] = timestamp.decode("ascii") if timestamp else None
+        payload: dict[str, str | None] = {"value": field_value.decode("ascii"),
+                                          "timestamp": timestamp.decode("ascii") if timestamp else None}
         tag = tag.decode("ascii")
         self._values[tag] = payload
         _LOGGER.debug("read the following values: %s -> %s", tag, repr(payload))
@@ -420,14 +443,29 @@ def linky_tic_tester(device: str, std_mode: bool) -> None:
         raise CannotConnect(
             f"Unable to connect to the serial device {device}: {exc}"
         ) from exc
-    # Try to read a line
-    try:
-        serial_reader.readline()
-    except serial.serialutil.SerialException as exc:
-        serial_reader.close()
-        raise CannotRead(f"Failed to read a line: {exc}") from exc
-    # All good
+
+    # Try to read a line with a few retries
+    max_retries = 5
+    retry = 0
+    error = None
+
+    while True:
+        retry += 1
+        error = None
+        try:
+            separator = MODE_STANDARD_FIELD_SEPARATOR if std_mode else MODE_HISTORIC_FIELD_SEPARATOR
+            line = serial_reader.readline()
+            if not separator in line:
+                error = CannotRead("Line is not a valid LinkyTIC one")
+        except serial.serialutil.SerialException as exc:
+            error = CannotRead(f"Failed to read a line: {exc}")
+
+        if not error:
+            break
+
     serial_reader.close()
+    if error:
+        raise error
 
 
 class CannotConnect(Exception):

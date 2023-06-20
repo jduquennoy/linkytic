@@ -16,6 +16,7 @@ from homeassistant.const import (
     UnitOfElectricCurrent,
     UnitOfEnergy,
     UnitOfPower,
+    UnitOfElectricPotential
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
@@ -31,7 +32,7 @@ from .const import (
     DID_TYPE,
     DID_YEAR,
     DOMAIN,
-    SETUP_THREEPHASE,
+    PROVIDER_INDEX_DEFAULT_NAMES, PROVIDER_INDEX_NAMES_FOR_OFFER, SETUP_THREEPHASE,
     SETUP_TICMODE,
     TICMODE_STANDARD,
 )
@@ -75,13 +76,14 @@ async def async_setup_entry(
                 "%s: wait time is over but a full frame has yet to be read: initializing sensors anyway",
                 config_entry.title,
             )
+
     # Init sensors
     sensors = []
     if config_entry.data.get(SETUP_TICMODE) == TICMODE_STANDARD:
         # standard mode
         sensors = [
             ADCOSensor(
-                config_entry.title, config_entry.entry_id, serial_reader
+                config_entry.title, config_entry.entry_id, serial_reader, "ADSC"
             ),  # needs to be the first for ADS parsing
             RegularStrSensor(
                 tag="NGTF",
@@ -92,6 +94,13 @@ async def async_setup_entry(
                 icon="mdi:cash-check",
                 category=EntityCategory.CONFIG,
             ),
+            EnergyIndexSensor(
+                tag="EAST",
+                name="Consomation global",
+                config_title=config_entry.title,
+                config_uniq_id=config_entry.entry_id,
+                serial_reader=serial_reader,
+            ),
             RegularIntSensor(
                 tag="PREF",
                 name="Puissance souscrite",
@@ -100,29 +109,118 @@ async def async_setup_entry(
                 serial_reader=serial_reader,
                 category=EntityCategory.CONFIG,
                 device_class=SensorDeviceClass.APPARENT_POWER,
-                native_unit_of_measurement=POWER_WATT,
+                native_unit_of_measurement=UnitOfApparentPower.VOLT_AMPERE,
             ),
-
-            # EAST : conso globale
-            (offer, timestamp) = serial_reader.values("EGTF")
-            index_names = []
-            if offre == "BASE":
-                index_names[0] = "Index consommation"
-            if offre == "EJP":
-                index_names[0] = "Index jour"
-                index_names[1] = "Index nuit"
-
-            # for each index_name, create sensor EASFXX
-
-
-            # couleur tempo J - registre d'etat
-            # couleur tempo J+1 - registre d'etat
         ]
+
+        offer_name, _ = serial_reader.get_values("NGTF")
+        offer_name = offer_name.strip().upper()
+        _LOGGER.debug(f"Setting up index sensors for offer '{offer_name}'")
+        index_names = PROVIDER_INDEX_NAMES_FOR_OFFER.get(offer_name, PROVIDER_INDEX_DEFAULT_NAMES)
+        # Looping on indexes
+        for i in range(10):
+            index_name = index_names[i]
+            if index_name is None:
+                continue
+            sensors.append(
+                EnergyIndexSensor(
+                    tag=f"EASF{i+1:02d}",
+                    name=index_name,
+                    config_title=config_entry.title,
+                    config_uniq_id=config_entry.entry_id,
+                    serial_reader=serial_reader
+                )
+            )
+
+        if bool(config_entry.data.get(SETUP_THREEPHASE)):
+            sensors.append(
+                RegularIntSensor(
+                    tag="SINSTS",
+                    name="Puissance instantanée totale",
+                    config_title=config_entry.title,
+                    config_uniq_id=config_entry.entry_id,
+                    serial_reader=serial_reader,
+                    category=EntityCategory.CONFIG,
+                    device_class=SensorDeviceClass.POWER,
+                    native_unit_of_measurement=UnitOfPower.WATT,
+                    register_callback=True,
+                )
+            )
+            for i in range(1, 4):
+                sensors.extend([
+                    RegularIntSensor(
+                        tag=f"IRMS{i}",
+                        name=f"Courant efficace phase {i}",
+                        config_title=config_entry.title,
+                        config_uniq_id=config_entry.entry_id,
+                        serial_reader=serial_reader,
+                        category=EntityCategory.CONFIG,
+                        device_class=SensorDeviceClass.CURRENT,
+                        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+                        register_callback=True,
+                    ),
+                    RegularIntSensor(
+                        tag=f"URMS{i}",
+                        name=f"Tension efficace phase {i}",
+                        config_title=config_entry.title,
+                        config_uniq_id=config_entry.entry_id,
+                        serial_reader=serial_reader,
+                        category=EntityCategory.CONFIG,
+                        device_class=SensorDeviceClass.VOLTAGE,
+                        native_unit_of_measurement=UnitOfElectricPotential.VOLT
+                    ),
+                    RegularIntSensor(
+                        tag=f"SINSTS{i}",
+                        name="Puissance instantanée phase {i}",
+                        config_title=config_entry.title,
+                        config_uniq_id=config_entry.entry_id,
+                        serial_reader=serial_reader,
+                        category=EntityCategory.CONFIG,
+                        device_class=SensorDeviceClass.POWER,
+                        native_unit_of_measurement=UnitOfPower.WATT,
+                        register_callback=True,
+                    )
+                ])
+        else:
+            sensors.extend([
+                RegularIntSensor(
+                    tag=f"IRMS1",
+                    name=f"Courant efficace",
+                    config_title=config_entry.title,
+                    config_uniq_id=config_entry.entry_id,
+                    serial_reader=serial_reader,
+                    category=EntityCategory.CONFIG,
+                    device_class=SensorDeviceClass.CURRENT,
+                    native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+                    register_callback=True,
+                ),
+                RegularIntSensor(
+                    tag=f"URMS1",
+                    name=f"Tension efficace",
+                    config_title=config_entry.title,
+                    config_uniq_id=config_entry.entry_id,
+                    serial_reader=serial_reader,
+                    category=EntityCategory.CONFIG,
+                    device_class=SensorDeviceClass.VOLTAGE,
+                    native_unit_of_measurement=UnitOfElectricPotential.VOLT
+                ),
+                RegularIntSensor(
+                    tag="SINSTS",
+                    name="Puissance instantanée",
+                    config_title=config_entry.title,
+                    config_uniq_id=config_entry.entry_id,
+                    serial_reader=serial_reader,
+                    category=EntityCategory.CONFIG,
+                    device_class=SensorDeviceClass.POWER,
+                    native_unit_of_measurement=UnitOfPower.WATT,
+                    register_callback=True,
+                ),
+            ])
     else:
         # historic mode
         sensors = [
             ADCOSensor(
-                config_entry.title, config_entry.entry_id, serial_reader
+                config_entry.title, config_entry.entry_id, serial_reader, "ADCO"
             ),  # needs to be the first for ADS parsing
             RegularStrSensor(
                 tag="OPTARIF",
@@ -473,7 +571,7 @@ class ADCOSensor(SensorEntity):
     _attr_icon = "mdi:tag"
 
     def __init__(
-        self, config_title: str, config_uniq_id: str, serial_reader: LinkyTICReader
+        self, config_title: str, config_uniq_id: str, serial_reader: LinkyTICReader, tag_name: str
     ) -> None:
         """Initialize an ADCO Sensor."""
         _LOGGER.debug("%s: initializing ADCO sensor", config_title)
@@ -482,9 +580,9 @@ class ADCOSensor(SensorEntity):
         self._config_uniq_id = config_uniq_id
         self._last_value: str | None = None
         self._serial_controller = serial_reader
-        self._tag = "ADCO"
+        self._tag = tag_name
         # Generic entity properties
-        self._attr_unique_id = f"{DOMAIN}_{config_uniq_id}_adco"
+        self._attr_unique_id = f"{DOMAIN}_{config_uniq_id}_{tag_name.lower()}"
         # We need to parse the ADS value first thing to have correct values for the device identification
         self.update()
 
