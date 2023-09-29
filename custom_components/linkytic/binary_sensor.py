@@ -16,7 +16,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     DID_CONNECTION_TYPE,
     DID_CONSTRUCTOR,
-    DID_DEFAULT_NAME,
+    DID_DEFAULT_MANUFACTURER, DID_DEFAULT_MODEL, DID_DEFAULT_NAME,
     DID_REGNUMBER,
     DID_TYPE,
     DOMAIN, SETUP_TICMODE, TICMODE_STANDARD,
@@ -151,12 +151,10 @@ class RelayState(BinarySensorEntity):
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
         return DeviceInfo(
-            default_manufacturer=DID_DEFAULT_MANUFACTURER,
-            default_model=DID_DEFAULT_MODEL,
-            default_name=DID_DEFAULT_NAME,
-            identifiers={(DOMAIN, self._config_uniq_id)},
+            identifiers={(DOMAIN, self._serial_controller.device_identification[DID_REGNUMBER])},
             manufacturer=self._serial_controller.device_identification[DID_CONSTRUCTOR],
             model=self._serial_controller.device_identification[DID_TYPE],
+            name=DID_DEFAULT_NAME,
         )
 
     @property
